@@ -1,100 +1,111 @@
 # ╔══════════════════════════════════════════════════════════════════════╗
-# ║          🚀 GitHub Actions 自动部署到 GitHub Pages                    ║
+# ║          🚀 CI/CD 自动化流水线（真实开发场景）                        ║
 # ║                                                                      ║
-# ║  作用：当你推送代码到 master 分支时，自动构建并部署网站                ║
-# ║  原理：GitHub 提供的免费 CI/CD 服务，在云端服务器上执行脚本            ║
+# ║  本文件演示正规团队常用的三种自动化场景：                              ║
+# ║  ❶ PR 提交时 → 仅构建检查（不部署）                                   ║
+# ║  ❷ 合并到 master → 自动部署到预览环境                                 ║
+# ║  ❸ 打版本标签 v* → 自动部署到生产环境（正式发版）                      ║
 # ╚══════════════════════════════════════════════════════════════════════╝
 
-# ╭──────────────────────────────────────────────────────────────────────╮
-# │  ❶ 工作流名称                                                        │
-# │  ──────────────────────────────────────────────────────────────────  │
-# │  这个名字会显示在 GitHub 仓库的 Actions 标签页里                       │
-# ╰──────────────────────────────────────────────────────────────────────╯
-name: Deploy to GitHub Pages
+name: CI/CD Pipeline
 
 # ╭──────────────────────────────────────────────────────────────────────╮
-# │  ❷ 触发条件                                                          │
+# │  触发条件                                                            │
 # │  ──────────────────────────────────────────────────────────────────  │
-# │  告诉 GitHub：什么时候执行这个自动化流程？                             │
+# │  同时监听三种事件，后续用 if 条件判断分别处理                            │
 # ╰──────────────────────────────────────────────────────────────────────╯
 on:
+  pull_request:            # ❶ 有人提交 PR 时触发（代码审查阶段）
+    branches: [master]
+
   push:
-    branches: [master]   # 只有当代码被推送到 master 分支时才触发
+    branches: [master]     # ❷ 代码被合并到 master 后触发
+    tags:
+      - 'v*'               # ❸ 推送标签（如 v1.0.0）时触发，正式发版
 
 # ╭──────────────────────────────────────────────────────────────────────╮
-# │  ❸ 权限配置                                                          │
-# │  ──────────────────────────────────────────────────────────────────  │
-# │  GitHub Actions 默认没有任何权限，这里显式声明运行所需的权限             │
+# │  权限配置                                                            │
 # ╰──────────────────────────────────────────────────────────────────────╯
 permissions:
-  contents: read         # 读取仓库代码（checkout 需要）
-  pages: write           # 写入 GitHub Pages（部署需要）
-  id-token: write        # 生成临时令牌（安全地部署到 Pages 需要）
+  contents: read
+  pages: write
+  id-token: write
 
 # ╭──────────────────────────────────────────────────────────────────────╮
-# │  ❹ 并发控制                                                          │
-# │  ──────────────────────────────────────────────────────────────────  │
-# │  防止同时触发多个部署任务导致冲突或资源浪费                              │
+# │  并发控制                                                            │
+# │  避免多个部署任务同时运行导致冲突或状态混乱                              │
 # ╰──────────────────────────────────────────────────────────────────────╯
 concurrency:
-  group: pages           # 同属于 "pages" 组的任务会排队执行
-  cancel-in-progress: false   # 不取消正在运行的，等它完成
+  group: pages
+  cancel-in-progress: false
 
 # ╭──────────────────────────────────────────────────────────────────────╮
-# │  ❺ 任务定义                                                          │
-# │  ──────────────────────────────────────────────────────────────────  │
-# │  一个工作流可以包含多个 job（任务），它们可以并行或串行执行              │
-# │  本文件包含两个任务：build（构建）→ deploy（部署）                     │
+# │  任务定义                                                            │
 # ╰──────────────────────────────────────────────────────────────────────╯
 jobs:
 
   # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  #  构建任务
-  #  拉取代码 → 安装依赖 → 构建项目 → 上传构建产物
+  #  构建任务（所有场景都会执行）
+  #  PR 时做「质检」，push 时做「构建产物」供后续部署使用
   # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   build:
-    runs-on: ubuntu-latest   # 在最新的 Ubuntu 云服务器上运行
+    runs-on: ubuntu-latest
 
     steps:
       - name: 📥 拉取仓库代码
-        uses: actions/checkout@v4   # 使用官方 action 将代码下载到服务器
+        uses: actions/checkout@v4
 
-      - name: 📦 安装 pnpm 包管理器
-        uses: pnpm/action-setup@v4  # 安装 pnpm（比 npm 更快，节省磁盘空间）
+      - name: 📦 安装 pnpm
+        uses: pnpm/action-setup@v4
         with:
-          version: 10               # 指定 pnpm 版本
-          run_install: false        # 只安装 pnpm，不执行 pnpm install
+          version: 10
+          run_install: false
 
       - name: ⬢ 配置 Node.js 环境
-        uses: actions/setup-node@v4 # 安装指定版本的 Node.js
+        uses: actions/setup-node@v4
         with:
-          node-version: 22          # 使用 Node.js 22 版本（LTS 长期支持版）
-          cache: pnpm               # 缓存 pnpm 的依赖，下次构建更快
+          node-version: 22
+          cache: pnpm
 
       - name: 🛠 安装项目依赖
-        run: pnpm install           # 根据 package.json 安装所有依赖包
+        run: pnpm install
 
       - name: 🏗 构建生产版本
-        run: pnpm run build         # 执行 Vite 构建，生成 dist 目录
+        run: pnpm run build
 
+      # 🔍 构建检查：PR 场景下只做验证，不部署
+      # 如果构建失败，PR 页面会显示 ❌，阻止合并
+      - name: ✅ 验证构建产物
+        run: |
+          echo "构建成功，产物如下："
+          ls -la dist
+
+      # 📤 只有「非 PR」场景才上传构建产物（供部署使用）
+      # github.event_name 是当前触发的事件名称
       - name: 📤 上传构建产物
-        uses: actions/upload-pages-artifact@v3   # 将 dist 目录打包上传到 GitHub 的临时存储
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v3
         with:
-          path: dist                # 要上传的文件夹路径（Vite 默认输出到这里）
+          path: dist
 
   # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  #  部署任务
-  #  将构建产物正式发布到 GitHub Pages（必须等 build 成功后才执行）
+  #  部署任务（仅非 PR 场景执行）
+  #  master 推送 → 预览环境 ｜ tag 推送 → 生产环境
   # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   deploy:
-    needs: build
+    needs: build            # 必须等 build 成功后才执行
+    if: github.event_name != 'pull_request'   # PR 时不执行部署
     runs-on: ubuntu-latest
 
+    # 🎯 环境名称动态判断：
+    # startsWith(github.ref, 'refs/tags/v') → 判断当前是否是标签推送
+    # 是 → 环境名称为 production（生产环境）
+    # 否 → 环境名称为 preview（预览环境）
     environment:
-      name: github-pages                       # 环境名称，用于在仓库的 Environments 中显示
-      url: ${{ steps.deployment.outputs.page_url }}   # 部署成功后显示的网站链接
+      name: ${{ startsWith(github.ref, 'refs/tags/v') && 'production' || 'preview' }}
+      url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
       - name: 🚀 部署到 GitHub Pages
-        id: deployment                         # 给这个步骤起个 ID，方便上面引用它的输出
-        uses: actions/deploy-pages@v4          # 官方 action：将上传的 artifact 正式发布到 Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
